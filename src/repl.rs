@@ -19,7 +19,8 @@ pub fn run() {
         match input[0].as_str() {
             "exit" => break, // Exit the shell
             "pwd" => println!("{}", env::current_dir().unwrap().display()),
-            "cd" => builtins::cd(input),
+            "cd" => builtins::cd(&input),
+            "echo" => println!("{}", builtins::echo(&input)),
             _ => executor::exec(&input),
         }
     }

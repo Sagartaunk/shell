@@ -2,7 +2,7 @@ use crate::parser;
 use libc::c_char;
 use libc::{execvp, fork, waitpid};
 use std::cmp::Ordering;
-pub fn exec(args: &Vec<String>) {
+pub fn exec(args: &[String]) {
     unsafe {
         let pid = fork();
         match pid.cmp(&0) {
