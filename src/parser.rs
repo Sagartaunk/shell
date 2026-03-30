@@ -7,10 +7,10 @@ pub fn cstring(input: &[String]) -> Vec<CString> {
 }
 #[derive(Debug)]
 pub struct Command {
-    args: Vec<String>,
-    stdin: Option<String>,
-    stdout: Option<String>,
-    append: bool,
+    pub args: Vec<String>,
+    pub stdin: Option<String>,
+    pub stdout: Option<String>,
+    pub append: bool,
 }
 pub fn parse(input: &str) -> Vec<Command> {
     let tokens: Vec<&str> = input.split_whitespace().collect();

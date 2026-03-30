@@ -1,11 +1,39 @@
 use crate::parser;
 use nix::sys::wait::waitpid;
 use nix::unistd::{ForkResult, close, execvp, fork, pipe};
+use std::fs::OpenOptions;
 use std::os::unix::io::{IntoRawFd, RawFd};
-pub fn exec(args: &[String]) {
+pub fn exec(comm: &parser::Command) {
     match unsafe { fork() } {
         Ok(ForkResult::Child) => {
-            let arg = parser::cstring(args);
+            let arg = parser::cstring(&comm.args);
+            if comm.stdin.is_some() {
+                let file = OpenOptions::new()
+                    .read(true)
+                    .open(comm.stdin.as_ref().unwrap())
+                    .expect("Failed to open file");
+                let fd = file.into_raw_fd();
+                unsafe {
+                    libc::dup2(fd, 0);
+                }
+            }
+            if comm.stdout.is_some() {
+                let file = match comm.append {
+                    true => OpenOptions::new()
+                        .create(true)
+                        .append(true)
+                        .open(comm.stdout.as_ref().unwrap()),
+                    false => OpenOptions::new()
+                        .create(true)
+                        .write(true)
+                        .truncate(true)
+                        .open(comm.stdout.as_ref().unwrap()),
+                };
+                let fd = file.unwrap().into_raw_fd();
+                unsafe {
+                    libc::dup2(fd, 1);
+                }
+            }
             let args: Vec<&std::ffi::CStr> = arg.iter().map(|s| s.as_c_str()).collect();
             match execvp(args[0], &args) {
                 Ok(_) => return,
@@ -21,6 +49,8 @@ pub fn exec(args: &[String]) {
         }
     }
 }
+
+//Todo -> Restructure exec_pipe according to new parser
 pub fn exec_pipe(args: &Vec<Vec<String>>) {
     let mut pipes: Vec<(RawFd, RawFd)> = Vec::new();
     let mut pids = vec![];
