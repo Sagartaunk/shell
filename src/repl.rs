@@ -18,7 +18,7 @@ pub fn run() {
             }
         };
         let input: Vec<parser::Command> = parser::parse(&input);
-        if input.is_empty() | input[0].args.is_empty() {
+        if input.is_empty() || input[0].args.is_empty() {
             continue;
         }
         if input.len() == 1 {

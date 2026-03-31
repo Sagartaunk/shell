@@ -15,6 +15,7 @@ pub fn exec(comm: &parser::Command) {
                 let fd = file.into_raw_fd();
                 unsafe {
                     libc::dup2(fd, 0);
+                    libc::close(fd);
                 }
             }
             if comm.stdout.is_some() {
@@ -32,6 +33,7 @@ pub fn exec(comm: &parser::Command) {
                 let fd = file.unwrap().into_raw_fd();
                 unsafe {
                     libc::dup2(fd, 1);
+                    libc::close(fd);
                 }
             }
             let args: Vec<&std::ffi::CStr> = arg.iter().map(|s| s.as_c_str()).collect();
@@ -77,17 +79,6 @@ pub fn exec_pipe(args: &[parser::Command]) {
                             libc::close(fd);
                         }
                     }
-                    for p in &pipes {
-                        close(p.0).unwrap();
-                        close(p.1).unwrap();
-                    }
-                    let command = parser::cstring(&args[i].args);
-                    let comm: Vec<&std::ffi::CStr> = command.iter().map(|c| c.as_c_str()).collect();
-                    match execvp(comm[0], &comm) {
-                        Ok(_) => unreachable!(),
-                        Err(e) => eprintln!("{}", e),
-                    }
-                    std::process::exit(1);
                 } else if i == args.len() - 1 {
                     unsafe { libc::dup2(pipes[i - 1].0, 0) };
                     if args[i].stdout.is_some() {
@@ -108,34 +99,23 @@ pub fn exec_pipe(args: &[parser::Command]) {
                             libc::close(fd);
                         }
                     }
-                    for p in &pipes {
-                        close(p.0).unwrap();
-                        close(p.1).unwrap();
-                    }
-                    let command = parser::cstring(&args[i].args);
-                    let comm: Vec<&std::ffi::CStr> = command.iter().map(|c| c.as_c_str()).collect();
-                    match execvp(comm[0], &comm) {
-                        Ok(_) => unreachable!(),
-                        Err(e) => eprintln!("{}", e),
-                    }
-                    std::process::exit(1);
                 } else {
                     unsafe { libc::dup2(pipes[i - 1].0, 0) };
                     unsafe {
                         libc::dup2(pipes[i].1, 1);
                     };
-                    for p in &pipes {
-                        close(p.0).unwrap();
-                        close(p.1).unwrap();
-                    }
-                    let command = parser::cstring(&args[i].args);
-                    let comm: Vec<&std::ffi::CStr> = command.iter().map(|c| c.as_c_str()).collect();
-                    match execvp(comm[0], &comm) {
-                        Ok(_) => unreachable!(),
-                        Err(e) => eprintln!("{}", e),
-                    }
-                    std::process::exit(1);
                 }
+                for p in &pipes {
+                    close(p.0).unwrap();
+                    close(p.1).unwrap();
+                }
+                let command = parser::cstring(&args[i].args);
+                let comm: Vec<&std::ffi::CStr> = command.iter().map(|c| c.as_c_str()).collect();
+                match execvp(comm[0], &comm) {
+                    Ok(_) => unreachable!(),
+                    Err(e) => eprintln!("{}", e),
+                }
+                std::process::exit(1);
             }
             Ok(ForkResult::Parent { child }) => {
                 pids.push(child);

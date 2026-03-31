@@ -1,6 +1,6 @@
 use crate::parser;
 use std::env;
-use std::fs::{self, OpenOptions};
+use std::fs::OpenOptions;
 use std::io::Write;
 pub fn cd(pat: &parser::Command) {
     let path: &[String] = &pat.args;
@@ -41,10 +41,6 @@ pub fn echo(input: &parser::Command) {
                 return;
             }
         };
-    } else if input.stdin.is_some() {
-        let contents = fs::read_to_string("example.txt").expect("Failed to read file");
-        println!("{}", contents);
-        return;
     }
     println!("{}", comm);
 }
