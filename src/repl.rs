@@ -31,6 +31,6 @@ pub fn run() {
             }
             continue;
         }
-        //executor::exec_pipe(&input);
+        executor::exec_pipe(&input);
     }
 }

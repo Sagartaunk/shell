@@ -50,8 +50,7 @@ pub fn exec(comm: &parser::Command) {
     }
 }
 
-//Todo -> Restructure exec_pipe according to new parser
-pub fn exec_pipe(args: &Vec<Vec<String>>) {
+pub fn exec_pipe(args: &[parser::Command]) {
     let mut pipes: Vec<(RawFd, RawFd)> = Vec::new();
     let mut pids = vec![];
     for _i in 0..(args.len() - 1) {
@@ -67,27 +66,56 @@ pub fn exec_pipe(args: &Vec<Vec<String>>) {
                     unsafe {
                         libc::dup2(pipes[i].1, 1);
                     };
+                    if args[i].stdin.is_some() {
+                        let file = OpenOptions::new()
+                            .read(true)
+                            .open(args[i].stdin.as_ref().unwrap())
+                            .expect("Failed to open file");
+                        let fd = file.into_raw_fd();
+                        unsafe {
+                            libc::dup2(fd, 0);
+                            libc::close(fd);
+                        }
+                    }
                     for p in &pipes {
                         close(p.0).unwrap();
                         close(p.1).unwrap();
                     }
-                    let command = parser::cstring(&args[i]);
+                    let command = parser::cstring(&args[i].args);
                     let comm: Vec<&std::ffi::CStr> = command.iter().map(|c| c.as_c_str()).collect();
                     match execvp(comm[0], &comm) {
-                        Ok(_) => continue,
+                        Ok(_) => unreachable!(),
                         Err(e) => eprintln!("{}", e),
                     }
                     std::process::exit(1);
                 } else if i == args.len() - 1 {
                     unsafe { libc::dup2(pipes[i - 1].0, 0) };
+                    if args[i].stdout.is_some() {
+                        let file = match args[i].append {
+                            true => OpenOptions::new()
+                                .create(true)
+                                .append(true)
+                                .open(args[i].stdout.as_ref().unwrap()),
+                            false => OpenOptions::new()
+                                .create(true)
+                                .write(true)
+                                .truncate(true)
+                                .open(args[i].stdout.as_ref().unwrap()),
+                        };
+                        let fd = file.unwrap().into_raw_fd();
+                        unsafe {
+                            libc::dup2(fd, 1);
+                            libc::close(fd);
+                        }
+                    }
                     for p in &pipes {
                         close(p.0).unwrap();
                         close(p.1).unwrap();
                     }
-                    let command = parser::cstring(&args[i]);
+                    let command = parser::cstring(&args[i].args);
                     let comm: Vec<&std::ffi::CStr> = command.iter().map(|c| c.as_c_str()).collect();
                     match execvp(comm[0], &comm) {
-                        Ok(_) => continue,
+                        Ok(_) => unreachable!(),
                         Err(e) => eprintln!("{}", e),
                     }
                     std::process::exit(1);
@@ -100,10 +128,10 @@ pub fn exec_pipe(args: &Vec<Vec<String>>) {
                         close(p.0).unwrap();
                         close(p.1).unwrap();
                     }
-                    let command = parser::cstring(&args[i]);
+                    let command = parser::cstring(&args[i].args);
                     let comm: Vec<&std::ffi::CStr> = command.iter().map(|c| c.as_c_str()).collect();
                     match execvp(comm[0], &comm) {
-                        Ok(_) => continue,
+                        Ok(_) => unreachable!(),
                         Err(e) => eprintln!("{}", e),
                     }
                     std::process::exit(1);
