@@ -5,12 +5,19 @@ use std::io::Write;
 pub fn cd(pat: &parser::Command) {
     let path: &[String] = &pat.args;
     if path.len() < 2 {
-        match std::env::set_current_dir(std::env::var("HOME").unwrap_or_default()) {
+        let home = match env::var("HOME") {
+            Ok(val) => val,
+            Err(_) => {
+                env::set_current_dir("/").expect("failed to change dir");
+                "/".to_string()
+            }
+        };
+        match std::env::set_current_dir(home) {
             Ok(_) => return,
             Err(e) => {
                 println!("{}", e)
             }
-        }
+        };
         return;
     }
     match env::set_current_dir(&path[1]) {

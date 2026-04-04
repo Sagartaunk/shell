@@ -1,11 +1,17 @@
 use crate::builtins;
 use crate::executor;
 use crate::parser;
+use nix::sys::signal::{SigHandler, Signal, signal};
 use std::env;
 use std::io::{self, Write};
 
 pub fn run() {
     loop {
+        unsafe {
+            signal(Signal::SIGINT, SigHandler::SigIgn).unwrap();
+            signal(Signal::SIGTSTP, SigHandler::SigIgn).unwrap();
+            signal(Signal::SIGQUIT, SigHandler::SigIgn).unwrap();
+        };
         print!("{} -> ", env::current_dir().unwrap().display());
         io::stdout().flush().unwrap();
         let mut input = String::new();
