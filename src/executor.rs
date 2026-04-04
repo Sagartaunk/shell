@@ -1,6 +1,6 @@
 use crate::parser;
 use nix::sys::wait::waitpid;
-use nix::unistd::{ForkResult, execvp, fork, pipe};
+use nix::unistd::{ForkResult, Pid, execvp, fork, pipe, setpgid};
 use std::fs::OpenOptions;
 use std::os::fd::{AsRawFd, IntoRawFd};
 use std::os::unix::io::OwnedFd;
@@ -68,6 +68,7 @@ pub fn exec(comm: &parser::Command) {
 
 pub fn exec_pipe(args: &[parser::Command]) {
     let mut pipes: Vec<(OwnedFd, OwnedFd)> = Vec::new();
+    let mut pgid: Option<Pid> = None; //Leader Pid
     let mut pids = vec![];
     for _i in 0..(args.len() - 1) {
         let (read_fd, write_fd) = pipe().unwrap();
@@ -77,6 +78,8 @@ pub fn exec_pipe(args: &[parser::Command]) {
         match unsafe { fork() } {
             Ok(ForkResult::Child) => {
                 if i == 0 {
+                    //Leader process (The first process which sets the Pgid)
+                    setpgid(Pid::from_raw(0), Pid::from_raw(0)).expect("Failed to set PGID");
                     unsafe {
                         match libc::dup2(pipes[i].1.as_raw_fd(), 1) {
                             -1 => {
@@ -105,6 +108,8 @@ pub fn exec_pipe(args: &[parser::Command]) {
                         }
                     }
                 } else if i == args.len() - 1 {
+                    // Process n-1  (the last process)
+                    setpgid(Pid::from_raw(0), pgid.unwrap()).expect("Set pgid failed");
                     // Write output to a file
                     unsafe {
                         match libc::dup2(pipes[i - 1].0.as_raw_fd(), 0) {
@@ -142,6 +147,8 @@ pub fn exec_pipe(args: &[parser::Command]) {
                         }
                     }
                 } else {
+                    // Process I (the middle process)
+                    setpgid(Pid::from_raw(0), pgid.unwrap()).expect("Set pgid failed");
                     unsafe {
                         match libc::dup2(pipes[i - 1].0.as_raw_fd(), 0) {
                             -1 => {
@@ -161,11 +168,10 @@ pub fn exec_pipe(args: &[parser::Command]) {
                         };
                     };
                 }
-                for p in &pipes {
-                    //Close all pipe ends before continuing to prevent EOF stalls
+                for (r, w) in &pipes {
                     unsafe {
-                        libc::close(p.0.as_raw_fd());
-                        libc::close(p.1.as_raw_fd());
+                        libc::close(r.as_raw_fd());
+                        libc::close(w.as_raw_fd());
                     }
                 }
                 let command = parser::cstring(&args[i].args);
@@ -177,11 +183,24 @@ pub fn exec_pipe(args: &[parser::Command]) {
                 unsafe { libc::_exit(1) };
             }
             Ok(ForkResult::Parent { child }) => {
+                if i == 0 {
+                    //Parent sets Pgid's too to avoid race conditions
+                    pgid = Some(child);
+                    setpgid(child, child).expect("Failed to set pgid");
+                } else {
+                    setpgid(child, pgid.unwrap()).expect("Failed to set pgid");
+                }
                 pids.push(child);
             }
             Err(e) => {
                 eprintln!("{}", e);
             }
+        }
+    }
+    for p in pipes {
+        unsafe {
+            libc::close(p.0.into_raw_fd());
+            libc::close(p.1.into_raw_fd());
         }
     }
     for pid in pids.iter() {
