@@ -4,14 +4,29 @@ use nix::unistd::{ForkResult, Pid, execvp, fork, pipe, setpgid};
 use std::fs::OpenOptions;
 use std::os::fd::{AsRawFd, IntoRawFd};
 use std::os::unix::io::OwnedFd;
-pub fn exec(comm: &parser::Command) {
+
+#[derive(Debug)]
+pub enum JobState {
+    Running,
+    Suspended,
+}
+
+pub struct Job {
+    pub pgid: Pid,
+    pub state: JobState,
+    pub command: String,
+}
+
+pub fn exec(command: &parser::Commands, jobs: &mut Vec<Job>) {
+    let comm = &command.command;
     match unsafe { fork() } {
         Ok(ForkResult::Child) => {
-            let arg = parser::cstring(&comm.args);
-            if comm.stdin.is_some() {
+            setpgid(Pid::from_raw(0), Pid::from_raw(0)).expect("Failed to set PGID");
+            let arg = parser::cstring(&comm[0].args);
+            if comm[0].stdin.is_some() {
                 let file = OpenOptions::new()
                     .read(true)
-                    .open(comm.stdin.as_ref().unwrap())
+                    .open(comm[0].stdin.as_ref().unwrap())
                     .expect("Failed to open file");
                 let fd = file.into_raw_fd();
                 unsafe {
@@ -25,17 +40,17 @@ pub fn exec(comm: &parser::Command) {
                     };
                 }
             }
-            if comm.stdout.is_some() {
-                let file = match comm.append {
+            if comm[0].stdout.is_some() {
+                let file = match comm[0].append {
                     true => OpenOptions::new()
                         .create(true)
                         .append(true)
-                        .open(comm.stdout.as_ref().unwrap()),
+                        .open(comm[0].stdout.as_ref().unwrap()),
                     false => OpenOptions::new()
                         .create(true)
                         .write(true)
                         .truncate(true)
-                        .open(comm.stdout.as_ref().unwrap()),
+                        .open(comm[0].stdout.as_ref().unwrap()),
                 }
                 .expect("Failed to open output file");
                 let fd = file.into_raw_fd();
@@ -58,7 +73,17 @@ pub fn exec(comm: &parser::Command) {
             unsafe { libc::_exit(1) }; // If code reaches here exit with an error
         }
         Ok(ForkResult::Parent { child }) => {
-            waitpid(child, None).unwrap(); //Wait and free all the child process to prevent them from becoming zombie
+            setpgid(child, child).expect("Failed to set pgid");
+            if command.bg {
+                let name: String = parser::construct_string(&comm);
+                jobs.push(Job {
+                    pgid: child,
+                    state: JobState::Running,
+                    command: name,
+                });
+            } else {
+                waitpid(child, None).unwrap(); //Wait and free all the child process to prevent them from becoming zombie
+            }
         }
         Err(e) => {
             eprintln!("Error : {}", e);
@@ -66,10 +91,11 @@ pub fn exec(comm: &parser::Command) {
     }
 }
 
-pub fn exec_pipe(args: &[parser::Command]) {
+pub fn exec_pipe(commands: &parser::Commands, jobs: &mut Vec<Job>) {
     let mut pipes: Vec<(OwnedFd, OwnedFd)> = Vec::new();
     let mut pgid: Option<Pid> = None; //Leader Pid
     let mut pids = vec![];
+    let args = &commands.command;
     for _i in 0..(args.len() - 1) {
         let (read_fd, write_fd) = pipe().unwrap();
         pipes.push((read_fd, write_fd));
@@ -203,7 +229,16 @@ pub fn exec_pipe(args: &[parser::Command]) {
             libc::close(p.1.into_raw_fd());
         }
     }
-    for pid in pids.iter() {
-        waitpid(*pid, None).unwrap();
+    if commands.bg {
+        let name: String = parser::construct_string(&commands.command);
+        jobs.push(Job {
+            pgid: pgid.unwrap(),
+            state: JobState::Running,
+            command: name,
+        });
+    } else {
+        for pid in pids.iter() {
+            waitpid(*pid, None).unwrap();
+        }
     }
 }

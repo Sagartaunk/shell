@@ -5,16 +5,30 @@ pub fn cstring(input: &[String]) -> Vec<CString> {
         .map(|s| CString::new(s.as_str()).unwrap())
         .collect()
 }
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Command {
     pub args: Vec<String>,
     pub stdin: Option<String>,
     pub stdout: Option<String>,
     pub append: bool,
 }
-pub fn parse(input: &str) -> Vec<Command> {
-    let tokens: Vec<&str> = input.split_whitespace().collect();
+#[derive(Debug)]
+pub struct Commands {
+    //Wrapper for Command structure crate::executor;
+    pub command: Vec<Command>,
+    pub bg: bool,
+}
+
+pub fn parse(input: &str) -> Commands {
+    let tokens: Vec<&str> = input
+        .split_whitespace()
+        .map(|s| s.trim_matches('"'))
+        .collect();
     let mut commands = Vec::new();
+    let mut comm = Commands {
+        command: Vec::new(),
+        bg: false,
+    };
     let mut current = Command {
         args: Vec::new(),
         stdin: None,
@@ -53,6 +67,9 @@ pub fn parse(input: &str) -> Vec<Command> {
                     current.append = true;
                 }
             }
+            "&" => {
+                comm.bg = true;
+            }
             _ => {
                 current.args.push(tokens[i].to_string());
             }
@@ -62,5 +79,12 @@ pub fn parse(input: &str) -> Vec<Command> {
     if !current.args.is_empty() {
         commands.push(current);
     }
-    commands
+    comm.command = commands;
+    comm
+}
+pub fn construct_string(args: &[Command]) -> String {
+    args.iter()
+        .map(|c| c.args.join(" "))
+        .collect::<Vec<_>>()
+        .join(" | ")
 }

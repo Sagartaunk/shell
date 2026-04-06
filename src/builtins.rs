@@ -1,3 +1,4 @@
+use crate::executor::Job;
 use crate::parser;
 use std::env;
 use std::fs::OpenOptions;
@@ -56,5 +57,17 @@ pub fn pwd() {
     match env::current_dir() {
         Ok(path) => println!("{}", path.display()),
         Err(e) => println!("{}", e),
+    }
+}
+pub fn jobs(job: &[Job]) {
+    println!("Index Status Command PGID");
+    for i in 0..job.len() {
+        println!(
+            "{} {:?} {} {}",
+            i + 1,
+            job[i].state,
+            job[i].command,
+            job[i].pgid
+        );
     }
 }
