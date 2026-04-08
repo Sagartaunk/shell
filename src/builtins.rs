@@ -1,5 +1,8 @@
 use crate::executor::Job;
 use crate::parser;
+use nix::sys::signal::{SIGCONT, killpg};
+use nix::sys::wait::waitpid;
+use nix::unistd::{Pid, getpgrp, tcsetpgrp};
 use std::env;
 use std::fs::OpenOptions;
 use std::io::Write;
@@ -69,5 +72,54 @@ pub fn jobs(job: &[Job]) {
             job[i].command,
             job[i].pgid
         );
+    }
+}
+pub fn fg(jobs: &mut Vec<Job>, jobid: usize) {
+    if jobid > jobs.len() {
+        eprintln!("Index out of bounds");
+        return;
+    } else {
+        let pgid = jobs[jobid - 1].pgid;
+        match killpg(pgid, SIGCONT) {
+            Ok(_) => {}
+            Err(e) => {
+                eprintln!("{}", e);
+                return;
+            }
+        };
+        match tcsetpgrp(std::io::stdin(), pgid) {
+            Ok(_) => {}
+            Err(e) => {
+                eprintln!("{}", e);
+                return;
+            }
+        };
+        waitpid(Pid::from_raw(-pgid.as_raw()), None).unwrap();
+        match tcsetpgrp(std::io::stdin(), getpgrp()) {
+            Ok(_) => {}
+            Err(e) => {
+                eprintln!("tcsetpgrp failed: {}", e);
+                return;
+            }
+        };
+        jobs.remove(jobid - 1);
+    }
+}
+pub fn bg(jobs: &mut Vec<Job>, jobid: usize) {
+    if jobid > jobs.len() {
+        eprintln!("Index out of bounds");
+        return;
+    } else {
+        let pgid = jobs[jobid - 1].pgid;
+        match killpg(pgid, SIGCONT) {
+            Ok(_) => {
+                jobs[jobid - 1].state = crate::executor::JobState::Running;
+                return;
+            }
+            Err(e) => {
+                eprintln!("{}", e);
+                return;
+            }
+        };
     }
 }

@@ -13,6 +13,8 @@ pub fn run() {
         signal(Signal::SIGINT, SigHandler::SigIgn).unwrap();
         signal(Signal::SIGTSTP, SigHandler::SigIgn).unwrap();
         signal(Signal::SIGQUIT, SigHandler::SigIgn).unwrap();
+        signal(Signal::SIGTTOU, SigHandler::SigIgn).unwrap();
+        signal(Signal::SIGTTIN, SigHandler::SigIgn).unwrap();
     };
     loop {
         reap_jobs(&mut jobs);
@@ -38,6 +40,8 @@ pub fn run() {
                 "cd" => builtins::cd(&input.command[0]),
                 "echo" => builtins::echo(&input.command[0]),
                 "jobs" => builtins::jobs(&jobs),
+                "fg" => builtins::fg(&mut jobs, input.command[0].args[1].parse().unwrap()),
+                "bg" => builtins::bg(&mut jobs, input.command[0].args[1].parse().unwrap()),
                 _ => executor::exec(&input, &mut jobs),
             }
             continue;

@@ -1,6 +1,7 @@
 use crate::parser;
-use nix::sys::wait::waitpid;
+use nix::sys::wait::{WaitPidFlag, WaitStatus, waitpid};
 use nix::unistd::{ForkResult, Pid, execvp, fork, pipe, setpgid};
+use nix::unistd::{getpgrp, tcsetpgrp};
 use std::fs::OpenOptions;
 use std::os::fd::{AsRawFd, IntoRawFd};
 use std::os::unix::io::OwnedFd;
@@ -74,15 +75,35 @@ pub fn exec(command: &parser::Commands, jobs: &mut Vec<Job>) {
         }
         Ok(ForkResult::Parent { child }) => {
             setpgid(child, child).expect("Failed to set pgid");
+            let name: String = parser::construct_string(&comm);
             if command.bg {
-                let name: String = parser::construct_string(&comm);
                 jobs.push(Job {
                     pgid: child,
                     state: JobState::Running,
                     command: name,
                 });
             } else {
-                waitpid(child, None).unwrap(); //Wait and free all the child process to prevent them from becoming zombie
+                tcsetpgrp(std::io::stdin(), child).unwrap();
+                match waitpid(child, Some(WaitPidFlag::WUNTRACED)) {
+                    Ok(WaitStatus::Exited(_, _)) => {}
+                    Ok(WaitStatus::Stopped(_, _)) => {
+                        jobs.push(Job {
+                            pgid: child,
+                            state: JobState::Suspended,
+                            command: name,
+                        });
+                        match tcsetpgrp(std::io::stdin(), getpgrp()) {
+                            Ok(_) => {}
+                            Err(e) => {
+                                eprintln!("tcsetpgrp failed: {}", e);
+                                return;
+                            }
+                        };
+                    }
+                    Ok(WaitStatus::Signaled(_, _, _)) => {}
+                    Err(e) => eprintln!("{}", e),
+                    _ => {}
+                }
             }
         }
         Err(e) => {
@@ -100,6 +121,7 @@ pub fn exec_pipe(commands: &parser::Commands, jobs: &mut Vec<Job>) {
         let (read_fd, write_fd) = pipe().unwrap();
         pipes.push((read_fd, write_fd));
     }
+    let name: String = parser::construct_string(&commands.command);
     for i in 0..(args.len()) {
         match unsafe { fork() } {
             Ok(ForkResult::Child) => {
@@ -230,15 +252,39 @@ pub fn exec_pipe(commands: &parser::Commands, jobs: &mut Vec<Job>) {
         }
     }
     if commands.bg {
-        let name: String = parser::construct_string(&commands.command);
         jobs.push(Job {
             pgid: pgid.unwrap(),
             state: JobState::Running,
             command: name,
         });
     } else {
-        for pid in pids.iter() {
-            waitpid(*pid, None).unwrap();
+        tcsetpgrp(std::io::stdin(), pgid.unwrap()).unwrap();
+        loop {
+            match waitpid(
+                Pid::from_raw(-pgid.unwrap().as_raw()),
+                Some(WaitPidFlag::WUNTRACED),
+            ) {
+                Ok(WaitStatus::Exited(_, _)) => {}
+                Ok(WaitStatus::Signaled(_, _, _)) => {}
+                Ok(WaitStatus::Stopped(_, _)) => {
+                    jobs.push(Job {
+                        pgid: pgid.unwrap(),
+                        state: JobState::Suspended,
+                        command: name.clone(),
+                    });
+                    if let Err(e) = tcsetpgrp(std::io::stdin(), getpgrp()) {
+                        eprintln!("tcsetpgrp failed: {}", e);
+                        return;
+                    }
+                    break;
+                }
+                Err(nix::errno::Errno::ECHILD) => break,
+                Err(e) => {
+                    eprintln!("{}", e);
+                    break;
+                }
+                _ => {}
+            }
         }
     }
 }
