@@ -17,11 +17,21 @@ pub struct Job {
     pub state: JobState,
     pub command: String,
 }
+fn reset_signals() {
+    unsafe {
+        libc::signal(libc::SIGTSTP, libc::SIG_DFL);
+        libc::signal(libc::SIGINT, libc::SIG_DFL);
+        libc::signal(libc::SIGQUIT, libc::SIG_DFL);
+        libc::signal(libc::SIGTTOU, libc::SIG_DFL);
+        libc::signal(libc::SIGTTIN, libc::SIG_DFL);
+    }
+}
 
 pub fn exec(command: &parser::Commands, jobs: &mut Vec<Job>) {
     let comm = &command.command;
     match unsafe { fork() } {
         Ok(ForkResult::Child) => {
+            reset_signals();
             setpgid(Pid::from_raw(0), Pid::from_raw(0)).expect("Failed to set PGID");
             let arg = parser::cstring(&comm[0].args);
             if comm[0].stdin.is_some() {
@@ -85,7 +95,9 @@ pub fn exec(command: &parser::Commands, jobs: &mut Vec<Job>) {
             } else {
                 tcsetpgrp(std::io::stdin(), child).unwrap();
                 match waitpid(child, Some(WaitPidFlag::WUNTRACED)) {
-                    Ok(WaitStatus::Exited(_, _)) => {}
+                    Ok(WaitStatus::Exited(_, _)) => {
+                        tcsetpgrp(std::io::stdin(), getpgrp()).unwrap();
+                    }
                     Ok(WaitStatus::Stopped(_, _)) => {
                         jobs.push(Job {
                             pgid: child,
@@ -125,6 +137,7 @@ pub fn exec_pipe(commands: &parser::Commands, jobs: &mut Vec<Job>) {
     for i in 0..(args.len()) {
         match unsafe { fork() } {
             Ok(ForkResult::Child) => {
+                reset_signals();
                 if i == 0 {
                     //Leader process (The first process which sets the Pgid)
                     setpgid(Pid::from_raw(0), Pid::from_raw(0)).expect("Failed to set PGID");
@@ -264,8 +277,12 @@ pub fn exec_pipe(commands: &parser::Commands, jobs: &mut Vec<Job>) {
                 Pid::from_raw(-pgid.unwrap().as_raw()),
                 Some(WaitPidFlag::WUNTRACED),
             ) {
-                Ok(WaitStatus::Exited(_, _)) => {}
-                Ok(WaitStatus::Signaled(_, _, _)) => {}
+                Ok(WaitStatus::Exited(_, _)) => {
+                    tcsetpgrp(std::io::stdin(), getpgrp()).unwrap();
+                }
+                Ok(WaitStatus::Signaled(_, _, _)) => {
+                    continue;
+                }
                 Ok(WaitStatus::Stopped(_, _)) => {
                     jobs.push(Job {
                         pgid: pgid.unwrap(),

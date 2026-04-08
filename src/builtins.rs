@@ -1,7 +1,7 @@
 use crate::executor::Job;
 use crate::parser;
 use nix::sys::signal::{SIGCONT, killpg};
-use nix::sys::wait::waitpid;
+use nix::sys::wait::{WaitPidFlag, WaitStatus, waitpid};
 use nix::unistd::{Pid, getpgrp, tcsetpgrp};
 use std::env;
 use std::fs::OpenOptions;
@@ -94,15 +94,17 @@ pub fn fg(jobs: &mut Vec<Job>, jobid: usize) {
                 return;
             }
         };
-        waitpid(Pid::from_raw(-pgid.as_raw()), None).unwrap();
-        match tcsetpgrp(std::io::stdin(), getpgrp()) {
-            Ok(_) => {}
-            Err(e) => {
-                eprintln!("tcsetpgrp failed: {}", e);
-                return;
+        match waitpid(Pid::from_raw(-pgid.as_raw()), Some(WaitPidFlag::WUNTRACED)) {
+            Ok(WaitStatus::Exited(_, _)) | Ok(WaitStatus::Signaled(_, _, _)) => {
+                tcsetpgrp(std::io::stdin(), getpgrp()).unwrap();
+                jobs.remove(jobid - 1);
             }
-        };
-        jobs.remove(jobid - 1);
+            Ok(WaitStatus::Stopped(_, _)) => {
+                jobs[jobid - 1].state = crate::executor::JobState::Suspended;
+                tcsetpgrp(std::io::stdin(), getpgrp()).unwrap();
+            }
+            _ => {}
+        }
     }
 }
 pub fn bg(jobs: &mut Vec<Job>, jobid: usize) {
