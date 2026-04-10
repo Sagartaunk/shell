@@ -18,6 +18,7 @@ pub struct Job {
     pub command: String,
 }
 fn reset_signals() {
+    //Reset signal handelling for processes, The shell ignores signals otherwise
     unsafe {
         libc::signal(libc::SIGTSTP, libc::SIG_DFL);
         libc::signal(libc::SIGINT, libc::SIG_DFL);
@@ -28,6 +29,7 @@ fn reset_signals() {
 }
 
 pub fn exec(command: &parser::Commands, jobs: &mut Vec<Job>) {
+    //Only for single commands
     let comm = &command.command;
     match unsafe { fork() } {
         Ok(ForkResult::Child) => {
@@ -125,6 +127,7 @@ pub fn exec(command: &parser::Commands, jobs: &mut Vec<Job>) {
 }
 
 pub fn exec_pipe(commands: &parser::Commands, jobs: &mut Vec<Job>) {
+    //Executes and handels pipes
     let mut pipes: Vec<(OwnedFd, OwnedFd)> = Vec::new();
     let mut pgid: Option<Pid> = None; //Leader Pid
     let mut pids = vec![];
@@ -144,7 +147,7 @@ pub fn exec_pipe(commands: &parser::Commands, jobs: &mut Vec<Job>) {
                     unsafe {
                         match libc::dup2(pipes[i].1.as_raw_fd(), 1) {
                             -1 => {
-                                eprintln!("Failed to open File discriptor");
+                                eprintln!("Failed to initialize fork");
                                 libc::_exit(1);
                             }
                             _ => {}

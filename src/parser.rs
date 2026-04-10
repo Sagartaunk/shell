@@ -20,6 +20,7 @@ pub struct Commands {
 }
 
 pub fn parse(input: &str) -> Commands {
+    //Known limitation: Cannot handle Quote strings
     let tokens: Vec<&str> = input
         .split_whitespace()
         .map(|s| s.trim_matches('"'))

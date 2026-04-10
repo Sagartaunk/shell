@@ -35,18 +35,18 @@ pub fn run() {
         }
         if input.command.len() == 1 {
             match input.command[0].args[0].as_str() {
-                "exit" => break, // Exit the shell
-                "pwd" => builtins::pwd(),
-                "cd" => builtins::cd(&input.command[0]),
-                "echo" => builtins::echo(&input.command[0]),
-                "jobs" => builtins::jobs(&jobs),
-                "fg" => builtins::fg(&mut jobs, input.command[0].args[1].parse().unwrap()),
-                "bg" => builtins::bg(&mut jobs, input.command[0].args[1].parse().unwrap()),
-                _ => executor::exec(&input, &mut jobs),
+                "exit" => break,                             // Exit the shell
+                "pwd" => builtins::pwd(), //Builtin function prints the path of the working directory
+                "cd" => builtins::cd(&input.command[0]), // builtin function to change the working directory
+                "echo" => builtins::echo(&input.command[0]), // builtin function
+                "jobs" => builtins::jobs(&jobs), // builtin function to print the current running and suspended jobs
+                "fg" => builtins::fg(&mut jobs, input.command[0].args[1].parse().unwrap()), // Used to bring background jobs to the foreground and give their control to the shell
+                "bg" => builtins::bg(&mut jobs, input.command[0].args[1].parse().unwrap()), // Used to send a foreground job to the background
+                _ => executor::exec(&input, &mut jobs), //Run external commands
             }
             continue;
         }
-        executor::exec_pipe(&input, &mut jobs);
+        executor::exec_pipe(&input, &mut jobs); // Runs the pipe commands
     }
 }
 fn reap_jobs(jobs: &mut Vec<executor::Job>) {
