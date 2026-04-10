@@ -17,18 +17,18 @@ Moreover, I will be making an attempt to find out and fix any bugs in this code 
 ->Suspended job tracking (Ctrl+Z)  
 ->Multiple process pipeline execution  
 
-# Known limitations 
+## Known limitations 
 -> Proper Quotes handeling
 -> Too much unwrap use which can lead to panics 
 
 ## Todo :
--> Do proper testing and bug fixes
--> Remove unwrap calls wherever possible with proper error handeling
--> Add proper quotes handeling to the parser (Maybe)
+-> Do proper testing and bug fixes  
+-> Remove unwrap calls wherever possible with proper error handeling  
+-> Add proper quotes handeling to the parser (Maybe)  
 
 ## Steps To use the shell ->
-# First clone the shell with 
+#### First clone the shell with 
 git clone https://github.com/Sagartaunk/shell.git
-# Then cd into the shell directory and run the project with
+#### Then cd into the shell directory and run the project with
 cargo build --release
 ./target/release/shell
